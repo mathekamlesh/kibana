@@ -1,0 +1,9 @@
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/sit-mpos-access_log
+
+#----------------------------- Logstash output --------------------------------
+output.logstash:
+  hosts: ["logstash:5044"]

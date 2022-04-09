@@ -1,0 +1,64 @@
+version: '2.2'
+services:
+  logstash:
+    container_name: logstash
+    image: docker.elastic.co/logstash/logstash:8.1.1
+    ports:
+      - 5044:5044
+    environment:
+      SERVER_NAME: logstash
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./logstash/logstash.yml:/usr/share/logstash/config/logstash.yml
+    networks:
+      - esnet
+    depends_on:
+      - elasticsearch
+  filebeat:
+    container_name: filebeat
+    build:
+      context: .
+      dockerfile: filebeat.Dockerfile
+    volumes:
+      - /usr/local/var/log/httpd:/var/log
+    networks:
+      - esnet
+    depends_on:
+      - elasticsearch
+      - logstash
+  kibana:
+    image: kibana:8.1.1
+    ports:
+      - 5601:5601
+    networks:
+      - esnet
+    depends_on:
+      - elasticsearch
+    environment:
+      - XPACK_MONITORING_ENABLED:"true"
+      - XPACK_MONITORING_COLLECTION_ENABLED:"true"
+      - XPACK_SECURITY_ENABLED:"false"
+      # - ELASTICSEARCH_USERNAME:"elastic"
+      # - ELASTICSEARCH_PASSWORD:"password"
+  elasticsearch:
+    container_name: elasticsearch
+    image: elasticsearch:8.1.1
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      - discovery.type=single-node
+      - cluster.name=docker-
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "xpack.security.enabled=false"
+      # - ELASTIC_USERNAME="elastic"
+      # - ELASTIC_PASSWORD="password"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - esnet
+networks:
+  esnet:

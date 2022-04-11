@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jpm-nginx-test-app
+  namespace: default
+  labels:
+    app: jpm-nginx-test-app
+spec:
+ replicas: 1
+ selector:
+    matchLabels:
+      app: jpm-nginx-test-app
+ template:
+    metadata:
+      labels: 
+        app: jpm-nginx-test-app
+      annotations:
+        prometheus.io.scrape: "true"
+        prometheus.io.probe: "true"
+        prometheus.io.path: "/prometheus"
+    spec:
+      imagePullSecrets:
+        - name: jpm-nexus
+      containers:
+      - name: php-test-app-cont
+        image: nexuscoe.rjil.ril.com:5115/jpmphp/fpm:2022.04.08
+        env:
+        - name: TZ
+          value: "Asia/Kolkata"
+        ports:
+        - containerPort: 9000
+          protocol: TCP
+        imagePullPolicy: "Always"
+        resources:
+         requests:
+          cpu: 200m
+          memory: 500Mi
+         limits:
+          cpu: 500m
+          memory: 1Gi
+        volumeMounts:
+          - name: varlogapplogs
+            mountPath: /usr/local/openresty/nginx/html/application/logs
+          - name: phpfpmlogs
+            mountPath: /var/log/php-fpm
+      - name: jpm-nginx-test-app-cont
+        image: nexuscoe.rjil.ril.com:5115/jpmnginx/jpm-nginx:2022.04.05
+        env:
+        - name: TZ
+          value: "Asia/Kolkata"
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        imagePullPolicy: "Always"
+        resources:
+         requests:
+          cpu: 200m
+          memory: 500Mi
+         limits:
+          cpu: 500m
+          memory: 1Gi
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 80
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          periodSeconds: 15
+        # # volumeMounts:
+        # #  - name: config-volume
+        #    mountPath: /etc/config
+      volumes:
+        - name: varlogapplogs
+          hostPath:
+            path: /var/log/applogs
+            type: DirectoryOrCreate
+        - name: phpfpmlogs
+          hostPath:
+            path: /var/log/phpfpm
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jpm-nginx-test-app
+  namespace: default
+  labels:
+    app: jpm-nginx-test-app
+spec:
+  # type: NodePort
+  selector:
+    app: jpm-nginx-test-app
+  ports:
+  - port: 80
+# nodePort: 32347
+# targetPort: 2128
+# name: jrcs-grpc
+    protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: http-ingress
+spec:
+  ingressClassName: public
+  rules:
+  - host: try.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jpm-nginx-test-app
+            port: 
+              number: 80
+---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: phpfpm
+#   namespace: default
+#   labels:
+#     app: phpfpm
+# spec:
+#  replicas: 1
+#  selector:
+#     matchLabels:
+#       app: phpfpm
+#  template:
+#     metadata:
+#       labels:
+#         app: phpfpm
+#       annotations:
+#         prometheus.io.scrape: "true"
+#         prometheus.io.probe: "true"
+#         prometheus.io.path: "/prometheus"
+#     spec:
+#       imagePullSecrets:
+#         - name: jpm-nexus
+#       containers:
+         
+        # readinessProbe:
+        #   httpGet:
+        #     path: /
+        #     port: 9000
+        #   initialDelaySeconds: 5
+        #   timeoutSeconds: 5
+        #   periodSeconds: 15
+        # # volumeMounts:
+        # #  - name: config-volume
+        #    mountPath: /etc/config
+      # volumes:
+      #  - name: config-volume
+      #    configMap:
+      #       name: jfsdap-inventory-posdmposting-app
+      # imagePullSecrets:
+      # - name: ppsecret-jfs-dap-newcommerce2
+---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: phpfpm
+#   namespace: default
+#   labels:
+#     app: phpfpm
+# spec:
+#   # type: NodePort
+#   selector:
+#     app: phpfpm
+#   ports:
+#   - port: 9000
+# # nodePort: 32347
+# # targetPort: 2128
+# # name: jrcs-grpc
+#     protocol: TCP
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jpm-nginx-test-app
+  namespace: "default"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jpm-nginx-test-app
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
